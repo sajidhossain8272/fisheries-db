@@ -30,7 +30,10 @@ export async function recordSaleFIFO({
   quantityKg,
   salePricePerKg,
   saleDate,
-  actorUsername
+  actorUsername,
+  customerName = null,
+  customerPhone = null,
+  customerAddress = null
 }) {
   const mongoClient = await getMongoClient();
   const db = await getDb();
@@ -119,6 +122,9 @@ export async function recordSaleFIFO({
         netProfit,
         donationRate: DONATION_RATE,
         allocations,
+        customerName: customerName || null,
+        customerPhone: customerPhone || null,
+        customerAddress: customerAddress || null,
         createdBy: actorUsername || null,
         createdAt: new Date(),
         updatedAt: new Date()

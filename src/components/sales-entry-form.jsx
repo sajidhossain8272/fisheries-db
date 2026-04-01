@@ -135,6 +135,31 @@ export function SalesEntryForm({ action, fishOptions, inventorySummary }) {
           </button>
         </div>
 
+        {/* Customer Details (Optional) */}
+        <div className="bg-blue-50 border border-blue-200 rounded-md p-4">
+          <p className="text-xs font-semibold text-blue-900 mb-3">CUSTOMER DETAILS (Optional)</p>
+          <div className="grid gap-3 md:grid-cols-3">
+            <input
+              name="customerName"
+              className="input"
+              type="text"
+              placeholder="Customer name"
+            />
+            <input
+              name="customerPhone"
+              className="input"
+              type="tel"
+              placeholder="Customer phone"
+            />
+            <input
+              name="customerAddress"
+              className="input"
+              type="text"
+              placeholder="Customer address"
+            />
+          </div>
+        </div>
+
         {/* Pricing Information Card */}
         {selectedFish && effectiveCostPerKg > 0 && (
           <div className="bg-zinc-50 border border-zinc-200 rounded-md p-4">

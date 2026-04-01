@@ -7,6 +7,7 @@ import { formatKg, formatMoney, toNumber } from "@/lib/number";
 import { recordSaleFIFO } from "@/lib/fish-ops";
 import { getSession } from "@/lib/hard-auth";
 import { SalesEntryForm } from "@/components/sales-entry-form";
+import { SalesTableRow } from "@/components/sales-table-row";
 
 async function createSaleAction(formData) {
   "use server";
@@ -22,6 +23,11 @@ async function createSaleAction(formData) {
     const salePricePerKg = toNumber(formData.get("salePricePerKg"));
     const saleDateRaw = String(formData.get("saleDate") || "").trim();
     const saleDate = saleDateRaw ? new Date(saleDateRaw) : new Date();
+    
+    // Customer details (optional)
+    const customerName = String(formData.get("customerName") || "").trim();
+    const customerPhone = String(formData.get("customerPhone") || "").trim();
+    const customerAddress = String(formData.get("customerAddress") || "").trim();
 
     if (!fishName || quantityKg <= 0 || salePricePerKg <= 0 || Number.isNaN(saleDate.getTime())) {
       throw new Error("Invalid sale input. Check fish name, quantity, and price.");
@@ -32,7 +38,10 @@ async function createSaleAction(formData) {
       quantityKg,
       salePricePerKg,
       saleDate,
-      actorUsername: session.username
+      actorUsername: session.username,
+      customerName: customerName || null,
+      customerPhone: customerPhone || null,
+      customerAddress: customerAddress || null
     });
 
     console.log("Sale recorded successfully:", result);
@@ -286,7 +295,7 @@ export default async function SalesPage({ searchParams }) {
 
         {/* Table */}
         <div className="mt-4 overflow-x-auto">
-          <table className="w-full min-w-[980px] border-collapse">
+          <table className="w-full min-w-[1100px] border-collapse">
             <thead>
               <tr className="border-b border-zinc-300 text-left text-xs uppercase tracking-wide text-zinc-500">
                 <th className="py-2">Date</th>
@@ -297,27 +306,19 @@ export default async function SalesPage({ searchParams }) {
                 <th className="py-2">Gross Profit</th>
                 <th className="py-2">Donation (5%)</th>
                 <th className="py-2">Net Profit</th>
+                <th className="py-2">Action</th>
               </tr>
             </thead>
             <tbody>
               {recentSales.length === 0 ? (
                 <tr>
-                  <td className="py-4 text-sm text-zinc-500" colSpan={8}>
+                  <td className="py-4 text-sm text-zinc-500" colSpan={9}>
                     No sales recorded.
                   </td>
                 </tr>
               ) : (
                 recentSales.map((sale) => (
-                  <tr key={sale._id.toString()} className="border-b border-zinc-200 text-sm">
-                    <td className="py-2">{new Date(sale.saleDate).toLocaleString()}</td>
-                    <td className="py-2 font-medium">{sale.fishName}</td>
-                    <td className="py-2">{formatKg(sale.quantityKg)}</td>
-                    <td className="py-2">{formatMoney(sale.revenue)}</td>
-                    <td className="py-2">{formatMoney(sale.cogs)}</td>
-                    <td className="py-2">{formatMoney(sale.grossProfit)}</td>
-                    <td className="py-2">{formatMoney(sale.donationAmount)}</td>
-                    <td className="py-2">{formatMoney(sale.netProfit)}</td>
-                  </tr>
+                  <SalesTableRow key={sale._id.toString()} sale={sale} />
                 ))
               )}
             </tbody>
