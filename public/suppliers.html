@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Suppliers | Product Manager</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body data-page="suppliers">
+    <div class="app-shell">
+      <aside class="app-sidebar">
+        <div class="brand-block">
+          <p class="brand-kicker">Kitchen OS</p>
+          <h1>Product Manager</h1>
+          <p class="brand-copy">Supplier ledger workspace for purchases, payments, and balances.</p>
+        </div>
+
+        <nav class="side-nav" aria-label="Primary">
+          <a href="/" class="nav-link" data-nav-page="overview">Overview</a>
+          <a href="/suppliers" class="nav-link" data-nav-page="suppliers">Suppliers</a>
+          <a href="/inventory" class="nav-link" data-nav-page="inventory">Inventory</a>
+          <a href="/sales" class="nav-link" data-nav-page="sales">Sales</a>
+        </nav>
+
+        <section class="sidebar-card">
+          <div class="card-heading">
+            <h3>Workspace Snapshot</h3>
+            <span class="muted">Live totals</span>
+          </div>
+          <div class="sidebar-summary" id="sidebar-summary"></div>
+        </section>
+      </aside>
+
+      <div class="app-main">
+        <header class="topbar">
+          <div class="page-head">
+            <p class="eyebrow">Supplier Portal</p>
+            <h2>Party ledger management</h2>
+            <p class="page-copy">
+              Select a supplier from the left, review the full ledger, and use the buttons to open
+              purchase or payment forms only when needed.
+            </p>
+          </div>
+
+          <div class="page-actions">
+            <button type="button" class="action-link action-link-primary" data-modal-open="purchase-modal">
+              New Purchase
+            </button>
+            <button type="button" class="action-link" data-modal-open="payment-modal">New Payment</button>
+          </div>
+
+          <div class="header-meta" id="header-meta"></div>
+        </header>
+
+        <nav class="top-nav" aria-label="Top navigation">
+          <a href="/" class="top-nav-link" data-nav-page="overview">Overview</a>
+          <a href="/suppliers" class="top-nav-link" data-nav-page="suppliers">Supplier Portal</a>
+          <a href="/inventory" class="top-nav-link" data-nav-page="inventory">Inventory Hub</a>
+          <a href="/sales" class="top-nav-link" data-nav-page="sales">Sales Dashboard</a>
+        </nav>
+
+        <div class="flash hidden" id="flash"></div>
+
+        <main class="content-stack">
+          <section class="portal-layout">
+            <aside class="panel module-sidebar">
+              <div class="card-heading">
+                <h3>Suppliers</h3>
+                <span class="muted" id="supplier-count-badge"></span>
+              </div>
+              <div class="supplier-list" id="supplier-list"></div>
+            </aside>
+
+            <div class="content-stack">
+              <section class="panel">
+                <div class="section-header">
+                  <div>
+                    <p class="section-kicker">Selected Supplier</p>
+                    <h2>Ledger summary</h2>
+                  </div>
+                  <p class="section-copy">
+                    Purchase totals, payment totals, and outstanding balance for the active party.
+                  </p>
+                </div>
+                <div class="summary-grid" id="supplier-summary"></div>
+              </section>
+
+              <section class="panel">
+                <div class="card-heading">
+                  <h3>Ledger Entries</h3>
+                  <span class="muted" id="ledger-caption"></span>
+                </div>
+                <div class="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Date</th>
+                        <th>Type</th>
+                        <th>Description</th>
+                        <th>Qty</th>
+                        <th>Rate</th>
+                        <th>Purchase</th>
+                        <th>Payment</th>
+                        <th>Source</th>
+                      </tr>
+                    </thead>
+                    <tbody id="supplier-ledger-body"></tbody>
+                  </table>
+                </div>
+              </section>
+            </div>
+          </section>
+        </main>
+      </div>
+    </div>
+
+    <div class="modal hidden" id="purchase-modal">
+      <div class="modal-backdrop" data-modal-close="purchase-modal"></div>
+      <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="purchase-modal-title">
+        <div class="modal-header">
+          <div>
+            <p class="section-kicker">New Purchase</p>
+            <h3 id="purchase-modal-title">Add supplier purchase</h3>
+          </div>
+          <button type="button" class="modal-close" data-modal-close="purchase-modal">Close</button>
+        </div>
+
+        <form class="entry-form modal-form" id="purchase-form">
+          <label>
+            Supplier
+            <select name="supplierId" id="purchase-supplier" required></select>
+          </label>
+
+          <label>
+            Product
+            <select name="productId" id="purchase-product"></select>
+          </label>
+
+          <label>
+            New product name
+            <input name="productName" type="text" placeholder="Only if this item is new" />
+          </label>
+
+          <label>
+            Purchase date
+            <input name="purchasedOn" type="date" required />
+          </label>
+
+          <label>
+            Description
+            <input name="description" type="text" placeholder="Optional ledger note" />
+          </label>
+
+          <label>
+            Size
+            <input name="size" type="text" placeholder="Example: 4 pcs 1kg" />
+          </label>
+
+          <label>
+            Packet
+            <input name="packet" type="text" placeholder="Packet count or pack note" />
+          </label>
+
+          <label>
+            Quantity
+            <input name="quantity" type="number" min="0" step="0.01" required />
+          </label>
+
+          <label>
+            Rate
+            <input name="rate" type="number" min="0" step="0.01" placeholder="Optional" />
+          </label>
+
+          <label>
+            Total amount
+            <input name="totalAmount" type="number" min="0" step="0.01" placeholder="Optional" />
+          </label>
+
+          <label class="span-2">
+            Note
+            <textarea name="note" rows="3" placeholder="Delivery or purchase note"></textarea>
+          </label>
+
+          <div class="form-note span-2" id="purchase-estimate"></div>
+          <button type="submit" class="primary-button span-2">Save Purchase</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="modal hidden" id="payment-modal">
+      <div class="modal-backdrop" data-modal-close="payment-modal"></div>
+      <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="payment-modal-title">
+        <div class="modal-header">
+          <div>
+            <p class="section-kicker">New Payment</p>
+            <h3 id="payment-modal-title">Log supplier payment</h3>
+          </div>
+          <button type="button" class="modal-close" data-modal-close="payment-modal">Close</button>
+        </div>
+
+        <form class="entry-form modal-form" id="payment-form">
+          <label>
+            Supplier
+            <select name="supplierId" id="payment-supplier" required></select>
+          </label>
+
+          <label>
+            Payment date
+            <input name="paidOn" type="date" required />
+          </label>
+
+          <label>
+            Amount
+            <input name="amount" type="number" min="0" step="0.01" required />
+          </label>
+
+          <label>
+            Reference
+            <input name="description" type="text" placeholder="Cash, bank, bill no." />
+          </label>
+
+          <label class="span-2">
+            Note
+            <textarea name="note" rows="4" placeholder="Any payment detail"></textarea>
+          </label>
+
+          <button type="submit" class="primary-button span-2">Save Payment</button>
+        </form>
+      </div>
+    </div>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

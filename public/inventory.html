@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Inventory | Product Manager</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body data-page="inventory">
+    <div class="app-shell">
+      <aside class="app-sidebar">
+        <div class="brand-block">
+          <p class="brand-kicker">Kitchen OS</p>
+          <h1>Product Manager</h1>
+          <p class="brand-copy">Inventory workspace for stock levels, reorder points, and adjustments.</p>
+        </div>
+
+        <nav class="side-nav" aria-label="Primary">
+          <a href="/" class="nav-link" data-nav-page="overview">Overview</a>
+          <a href="/suppliers" class="nav-link" data-nav-page="suppliers">Suppliers</a>
+          <a href="/inventory" class="nav-link" data-nav-page="inventory">Inventory</a>
+          <a href="/sales" class="nav-link" data-nav-page="sales">Sales</a>
+        </nav>
+
+        <section class="sidebar-card">
+          <div class="card-heading">
+            <h3>Workspace Snapshot</h3>
+            <span class="muted">Live totals</span>
+          </div>
+          <div class="sidebar-summary" id="sidebar-summary"></div>
+        </section>
+      </aside>
+
+      <div class="app-main">
+        <header class="topbar">
+          <div class="page-head">
+            <p class="eyebrow">Inventory Hub</p>
+            <h2>Stock and reorder management</h2>
+            <p class="page-copy">
+              Keep the page clean and use modals when you need to create a product or adjust stock.
+            </p>
+          </div>
+
+          <div class="page-actions">
+            <button type="button" class="action-link action-link-primary" data-modal-open="product-modal">
+              New Product
+            </button>
+            <button type="button" class="action-link" data-modal-open="adjustment-modal">
+              Stock Adjustment
+            </button>
+          </div>
+
+          <div class="header-meta" id="header-meta"></div>
+        </header>
+
+        <nav class="top-nav" aria-label="Top navigation">
+          <a href="/" class="top-nav-link" data-nav-page="overview">Overview</a>
+          <a href="/suppliers" class="top-nav-link" data-nav-page="suppliers">Supplier Portal</a>
+          <a href="/inventory" class="top-nav-link" data-nav-page="inventory">Inventory Hub</a>
+          <a href="/sales" class="top-nav-link" data-nav-page="sales">Sales Dashboard</a>
+        </nav>
+
+        <div class="flash hidden" id="flash"></div>
+
+        <main class="content-stack">
+          <section class="panel">
+            <div class="section-header">
+              <div>
+                <p class="section-kicker">Inventory Summary</p>
+                <h2>Current stock health</h2>
+              </div>
+              <p class="section-copy">
+                Update reorder levels directly in the table. Use the modal actions above for new
+                items and stock movement.
+              </p>
+            </div>
+
+            <div class="stat-grid stat-grid-compact" id="inventory-stats"></div>
+          </section>
+
+          <section class="panel">
+            <div class="card-heading">
+              <h3>Inventory Register</h3>
+              <span class="muted">Low stock rows are highlighted</span>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Product</th>
+                    <th>Stock</th>
+                    <th>Reorder</th>
+                    <th>Purchase Price</th>
+                    <th>Sale Price</th>
+                    <th>Profit Total</th>
+                    <th>Set Reorder</th>
+                  </tr>
+                </thead>
+                <tbody id="product-table-body"></tbody>
+              </table>
+            </div>
+          </section>
+        </main>
+      </div>
+    </div>
+
+    <div class="modal hidden" id="product-modal">
+      <div class="modal-backdrop" data-modal-close="product-modal"></div>
+      <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="product-modal-title">
+        <div class="modal-header">
+          <div>
+            <p class="section-kicker">New Product</p>
+            <h3 id="product-modal-title">Create or update a product</h3>
+          </div>
+          <button type="button" class="modal-close" data-modal-close="product-modal">Close</button>
+        </div>
+
+        <form class="entry-form modal-form" id="product-form">
+          <label>
+            Product name
+            <input name="name" type="text" required />
+          </label>
+
+          <label>
+            Reorder level
+            <input name="reorderLevel" type="number" min="0" step="0.01" />
+          </label>
+
+          <label>
+            Default purchase price
+            <input name="defaultPurchasePrice" type="number" min="0" step="0.01" />
+          </label>
+
+          <label>
+            Default sale price
+            <input name="defaultSalePrice" type="number" min="0" step="0.01" />
+          </label>
+
+          <label>
+            Default other cost
+            <input name="defaultOtherCost" type="number" min="0" step="0.01" />
+          </label>
+
+          <label class="span-2">
+            Notes
+            <textarea name="notes" rows="3" placeholder="Any stock note"></textarea>
+          </label>
+
+          <button type="submit" class="primary-button span-2">Save Product</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="modal hidden" id="adjustment-modal">
+      <div class="modal-backdrop" data-modal-close="adjustment-modal"></div>
+      <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="adjustment-modal-title">
+        <div class="modal-header">
+          <div>
+            <p class="section-kicker">Stock Adjustment</p>
+            <h3 id="adjustment-modal-title">Record stock movement</h3>
+          </div>
+          <button type="button" class="modal-close" data-modal-close="adjustment-modal">Close</button>
+        </div>
+
+        <form class="entry-form modal-form" id="adjustment-form">
+          <label>
+            Product
+            <select name="productId" id="adjustment-product" required></select>
+          </label>
+
+          <label>
+            Type
+            <select name="type" id="adjustment-type" required>
+              <option value="wastage">Wastage</option>
+              <option value="donation">Donation</option>
+              <option value="adjustment">Manual adjustment</option>
+            </select>
+          </label>
+
+          <label>
+            Direction
+            <select name="direction" id="adjustment-direction">
+              <option value="remove">Remove from stock</option>
+              <option value="add">Add to stock</option>
+            </select>
+          </label>
+
+          <label>
+            Date
+            <input name="adjustedOn" type="date" required />
+          </label>
+
+          <label>
+            Quantity
+            <input name="quantity" type="number" min="0" step="0.01" required />
+          </label>
+
+          <label class="span-2">
+            Note
+            <textarea name="note" rows="4" placeholder="Why was stock changed?"></textarea>
+          </label>
+
+          <button type="submit" class="primary-button span-2">Save Stock Movement</button>
+        </form>
+      </div>
+    </div>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
