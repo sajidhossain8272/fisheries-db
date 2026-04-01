@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { getDb } from "@/lib/mongodb";
 import { canManageSales } from "@/lib/roles";
@@ -8,35 +9,112 @@ import { getSession } from "@/lib/hard-auth";
 async function createSaleAction(formData) {
   "use server";
 
-  const session = await getSession();
-  if (!session || !canManageSales(session.role)) {
-    throw new Error("Permission denied for sales.");
+  try {
+    const session = await getSession();
+    if (!session || !canManageSales(session.role)) {
+      throw new Error("Permission denied for sales.");
+    }
+
+    const fishName = String(formData.get("fishName") || "").trim();
+    const quantityKg = toNumber(formData.get("quantityKg"));
+    const salePricePerKg = toNumber(formData.get("salePricePerKg"));
+    const saleDateRaw = String(formData.get("saleDate") || "").trim();
+    const saleDate = saleDateRaw ? new Date(saleDateRaw) : new Date();
+
+    if (!fishName || quantityKg <= 0 || salePricePerKg <= 0 || Number.isNaN(saleDate.getTime())) {
+      throw new Error("Invalid sale input.");
+    }
+
+    await recordSaleFIFO({
+      fishName,
+      quantityKg,
+      salePricePerKg,
+      saleDate,
+      actorUsername: session.username
+    });
+
+    revalidatePath("/sales");
+    revalidatePath("/inventory");
+    revalidatePath("/dashboard");
+  } catch (error) {
+    console.error("Sales action error:", error);
+    throw error;
   }
-
-  const fishName = String(formData.get("fishName") || "").trim();
-  const quantityKg = toNumber(formData.get("quantityKg"));
-  const salePricePerKg = toNumber(formData.get("salePricePerKg"));
-  const saleDateRaw = String(formData.get("saleDate") || "").trim();
-  const saleDate = saleDateRaw ? new Date(saleDateRaw) : new Date();
-
-  if (!fishName || quantityKg <= 0 || salePricePerKg <= 0 || Number.isNaN(saleDate.getTime())) {
-    throw new Error("Invalid sale input.");
-  }
-
-  await recordSaleFIFO({
-    fishName,
-    quantityKg,
-    salePricePerKg,
-    saleDate,
-    actorUsername: session.username
-  });
-
-  revalidatePath("/sales");
-  revalidatePath("/inventory");
-  revalidatePath("/dashboard");
 }
 
-async function getSalesData(searchParams) {
+function FilterDateForm({ startDate, endDate }) {
+  "use client";
+  return (
+    <div className="flex gap-2 flex-wrap items-end">
+      <div>
+        <label className="block text-xs text-zinc-600 mb-1">Start Date</label>
+        <input
+          type="date"
+          defaultValue={startDate}
+          id="filterStartDate"
+          className="input"
+        />
+      </div>
+      <div>
+        <label className="block text-xs text-zinc-600 mb-1">End Date</label>
+        <input
+          type="date"
+          defaultValue={endDate}
+          id="filterEndDate"
+          className="input"
+        />
+      </div>
+      <button
+        onClick={() => {
+          const start = document.getElementById("filterStartDate").value;
+          const end = document.getElementById("filterEndDate").value;
+          if (start && end) {
+            window.location.href = `/sales?filterType=date&startDate=${start}&endDate=${end}&page=1`;
+          }
+        }}
+        className="btn-black text-sm"
+      >
+        Filter
+      </button>
+      <a href="/sales?page=1" className="px-3 py-2 bg-zinc-200 text-black rounded text-sm">
+        Clear
+      </a>
+    </div>
+  );
+}
+
+function FilterMonthForm({ filterMonth }) {
+  "use client";
+  return (
+    <div className="flex gap-2 flex-wrap items-end">
+      <div>
+        <label className="block text-xs text-zinc-600 mb-1">Select Month</label>
+        <input
+          type="month"
+          defaultValue={filterMonth}
+          id="filterMonth"
+          className="input"
+        />
+      </div>
+      <button
+        onClick={() => {
+          const month = document.getElementById("filterMonth").value;
+          if (month) {
+            window.location.href = `/sales?filterType=month&month=${month}&page=1`;
+          }
+        }}
+        className="btn-black text-sm"
+      >
+        Filter
+      </button>
+      <a href="/sales?page=1" className="px-3 py-2 bg-zinc-200 text-black rounded text-sm">
+        Clear
+      </a>
+    </div>
+  );
+}
+
+
   const db = await getDb();
   
   // Parse filters
@@ -146,19 +224,19 @@ export default async function SalesPage({ searchParams }) {
           <div className="flex flex-wrap gap-2 items-center text-sm">
             <label className="font-medium">Filter by:</label>
             <a
-              href="?page=1"
+              href="/sales?page=1"
               className={`px-3 py-1 rounded ${filterType === "all" ? "bg-black text-white" : "bg-zinc-200 text-black"}`}
             >
               All
             </a>
             <a
-              href="?filterType=date&page=1"
+              href="/sales?filterType=date&page=1"
               className={`px-3 py-1 rounded ${filterType === "date" ? "bg-black text-white" : "bg-zinc-200 text-black"}`}
             >
               By Date Range
             </a>
             <a
-              href="?filterType=month&page=1"
+              href="/sales?filterType=month&page=1"
               className={`px-3 py-1 rounded ${filterType === "month" ? "bg-black text-white" : "bg-zinc-200 text-black"}`}
             >
               By Month
@@ -167,56 +245,12 @@ export default async function SalesPage({ searchParams }) {
 
           {/* Date Range Filter */}
           {filterType === "date" && (
-            <form className="flex gap-2 flex-wrap items-end">
-              <div>
-                <label className="block text-xs text-zinc-600 mb-1">Start Date</label>
-                <input
-                  type="date"
-                  name="startDate"
-                  defaultValue={startDate}
-                  className="input"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-xs text-zinc-600 mb-1">End Date</label>
-                <input
-                  type="date"
-                  name="endDate"
-                  defaultValue={endDate}
-                  className="input"
-                  required
-                />
-              </div>
-              <button type="submit" className="btn-black text-sm">
-                Filter
-              </button>
-              <a href="?page=1" className="px-3 py-2 bg-zinc-200 text-black rounded text-sm">
-                Clear
-              </a>
-            </form>
+            <FilterDateForm startDate={startDate} endDate={endDate} />
           )}
 
           {/* Month Filter */}
           {filterType === "month" && (
-            <form className="flex gap-2 flex-wrap items-end">
-              <div>
-                <label className="block text-xs text-zinc-600 mb-1">Month</label>
-                <input
-                  type="month"
-                  name="month"
-                  defaultValue={filterMonth}
-                  className="input"
-                  required
-                />
-              </div>
-              <button type="submit" className="btn-black text-sm">
-                Filter
-              </button>
-              <a href="?page=1" className="px-3 py-2 bg-zinc-200 text-black rounded text-sm">
-                Clear
-              </a>
-            </form>
+            <FilterMonthForm filterMonth={filterMonth} />
           )}
         </div>
 
@@ -271,13 +305,13 @@ export default async function SalesPage({ searchParams }) {
             {currentPage > 1 && (
               <>
                 <a
-                  href={`?filterType=${filterType}${startDate ? `&startDate=${startDate}` : ""}${endDate ? `&endDate=${endDate}` : ""}${filterMonth ? `&month=${filterMonth}` : ""}&page=1`}
+                  href={`/sales?filterType=${filterType}${startDate ? `&startDate=${startDate}` : ""}${endDate ? `&endDate=${endDate}` : ""}${filterMonth ? `&month=${filterMonth}` : ""}&page=1`}
                   className="px-2 py-1 border border-zinc-300 rounded text-sm hover:bg-zinc-100"
                 >
                   First
                 </a>
                 <a
-                  href={`?filterType=${filterType}${startDate ? `&startDate=${startDate}` : ""}${endDate ? `&endDate=${endDate}` : ""}${filterMonth ? `&month=${filterMonth}` : ""}&page=${currentPage - 1}`}
+                  href={`/sales?filterType=${filterType}${startDate ? `&startDate=${startDate}` : ""}${endDate ? `&endDate=${endDate}` : ""}${filterMonth ? `&month=${filterMonth}` : ""}&page=${currentPage - 1}`}
                   className="px-2 py-1 border border-zinc-300 rounded text-sm hover:bg-zinc-100"
                 >
                   Prev
@@ -292,13 +326,13 @@ export default async function SalesPage({ searchParams }) {
             {currentPage < totalPages && (
               <>
                 <a
-                  href={`?filterType=${filterType}${startDate ? `&startDate=${startDate}` : ""}${endDate ? `&endDate=${endDate}` : ""}${filterMonth ? `&month=${filterMonth}` : ""}&page=${currentPage + 1}`}
+                  href={`/sales?filterType=${filterType}${startDate ? `&startDate=${startDate}` : ""}${endDate ? `&endDate=${endDate}` : ""}${filterMonth ? `&month=${filterMonth}` : ""}&page=${currentPage + 1}`}
                   className="px-2 py-1 border border-zinc-300 rounded text-sm hover:bg-zinc-100"
                 >
                   Next
                 </a>
                 <a
-                  href={`?filterType=${filterType}${startDate ? `&startDate=${startDate}` : ""}${endDate ? `&endDate=${endDate}` : ""}${filterMonth ? `&month=${filterMonth}` : ""}&page=${totalPages}`}
+                  href={`/sales?filterType=${filterType}${startDate ? `&startDate=${startDate}` : ""}${endDate ? `&endDate=${endDate}` : ""}${filterMonth ? `&month=${filterMonth}` : ""}&page=${totalPages}`}
                   className="px-2 py-1 border border-zinc-300 rounded text-sm hover:bg-zinc-100"
                 >
                   Last
