@@ -1,7 +1,9 @@
 node_modules/
-data/*.db
+.next/
 *.log
+data/*.db
 .env
 .env.*
 !.env.example
 npm-debug.log*
+.npm-cache

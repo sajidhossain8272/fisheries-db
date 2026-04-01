@@ -1,56 +1,54 @@
-# Central-kitchen-khulna-product-db-admin
+# Central Kitchen Khulna Fisheries
 
-MongoDB-backed product management system for Central Kitchen Khulna. The app manages suppliers, inventory, sales, and stock adjustments from a simple Node.js server with static frontend pages.
+Next.js + Tailwind + MongoDB fish inventory and sales system, ready for Vercel deployment.
 
-## Production Setup
+## Features
 
-Create a local `.env` file from `.env.example` and set:
+- Black/white clean admin UI branded as **Central Kitchen Khulna Fisheries**
+- MongoDB Atlas-ready data layer
+- Role-based login with hardcoded seeded users:
+  - `super_admin` (full access)
+  - `admin` (inventory/product management)
+  - `employee` (view inventory + manage sales)
+- FIFO inventory costing by batch purchase date
+- Waste-aware costing (default waste `10%`, adjustable per batch)
+- Daily donation accounting (`5%` of gross profit)
+- Net profit calculation (`gross profit - donation`)
 
-- `NODE_ENV=production`
-- `HOST=0.0.0.0`
-- `PORT=3000`
-- `MONGODB_DB_NAME=centeral-kitchen`
-- `MONGODB_URI=your full MongoDB Atlas connection string`
+## Run Locally
 
-The repository keeps `.env` out of git. Put real secrets only in your local or deployment environment.
+1. Copy `.env.example` to `.env` and fill values.
+2. Install dependencies:
 
-## Run
-
-```powershell
-npm.cmd install
-npm.cmd start
+```bash
+npm install
 ```
 
-Open `http://127.0.0.1:3000` locally.
+3. Start dev server:
 
-## Health Checks
+```bash
+npm run dev
+```
 
-- `GET /api/health`
-- `GET /healthz`
-- `GET /readyz`
+4. Open `http://localhost:3000`.
 
-## Data Bootstrapping
+## Vercel Deployment
 
-On first startup the app will:
+Set these environment variables in Vercel Project Settings:
 
-1. Migrate `data/product-management.db` if it exists.
-2. Otherwise seed from CSV files.
+- `MONGODB_URI`
+- `MONGODB_DB_NAME`
+- `NEXTAUTH_SECRET`
+- `NEXTAUTH_URL` (set to your production URL after deploy)
+- `REPORT_TIMEZONE` (e.g. `Asia/Dhaka`)
+- `SUPER_ADMIN_PASSWORD`
+- `ADMIN_PASSWORD`
+- `EMPLOYEE_PASSWORD`
 
-Default CSV lookup order:
+## Default Login Emails
 
-1. `Product maangement/data`
-2. `Product maangement/public`
-3. the legacy parent `public` folder used in the current workspace
+- `superadmin@fisher.local`
+- `admin@fisher.local`
+- `employee@fisher.local`
 
-You can override those paths with:
-
-- `KITCHEN_CSV_PATH`
-- `SUPPLIER_CSV_PATH`
-
-## Available Pages
-
-- `/`
-- `/overview`
-- `/suppliers`
-- `/inventory`
-- `/sales`
+Passwords are taken from env variables above (hardcoded defaults are in `.env.example`).
