@@ -6,6 +6,7 @@ import { getSession } from "@/lib/hard-auth";
 import { formatKg, formatMoney, round2, toNumber } from "@/lib/number";
 import { InventoryBatchForm } from "@/components/inventory-form";
 import { LowInventoryAlert } from "@/components/low-inventory-alert";
+import { InventoryTableRow } from "@/components/inventory-table-row";
 
 async function createBatchAction(formData) {
   "use server";
@@ -74,6 +75,67 @@ async function createBatchAction(formData) {
     createdAt: new Date(),
     updatedAt: new Date()
   });
+
+  revalidatePath("/inventory");
+  revalidatePath("/dashboard");
+  revalidatePath("/sales");
+}
+
+async function updateBatchAction(formData) {
+  "use server";
+
+  const session = await getSession();
+  if (!session || !canManageInventory(session.role)) {
+    throw new Error("Permission denied for inventory management.");
+  }
+
+  const id = String(formData.get("id") || "");
+  if (!ObjectId.isValid(id)) {
+    throw new Error("Invalid batch id.");
+  }
+
+  const fishName = String(formData.get("fishName") || "").trim();
+  const initialKg = toNumber(formData.get("initialKg"));
+  const remainingKg = toNumber(formData.get("remainingKg"));
+  const wastePercent = toNumber(formData.get("wastePercent"));
+  const manualWasteKg = toNumber(formData.get("manualWasteKg"));
+  const buyPricePerKgRaw = toNumber(formData.get("buyPricePerKgRaw"));
+  const notes = String(formData.get("notes") || "").trim();
+
+  if (!fishName || initialKg <= 0 || buyPricePerKgRaw <= 0 || remainingKg < 0 || remainingKg > initialKg) {
+    throw new Error("Invalid batch data.");
+  }
+
+  // Calculate waste
+  let actualWasteKg = 0;
+  if (manualWasteKg > 0) {
+    actualWasteKg = round2(manualWasteKg);
+  } else if (wastePercent >= 0) {
+    actualWasteKg = round2(initialKg * (wastePercent / 100));
+  }
+
+  const totalRawCost = round2(initialKg * buyPricePerKgRaw);
+  const effectiveCostPerKgSellable = remainingKg > 0 ? round2(totalRawCost / remainingKg) : 0;
+
+  const db = await getDb();
+  await db.collection("inventory_batches").updateOne(
+    { _id: new ObjectId(id) },
+    {
+      $set: {
+        fishName,
+        initialKg: round2(initialKg),
+        remainingKg: round2(remainingKg),
+        wastePercent: wastePercent >= 0 ? round2(wastePercent) : null,
+        manualWasteKg: manualWasteKg > 0 ? round2(manualWasteKg) : null,
+        buyPricePerKgRaw: round2(buyPricePerKgRaw),
+        totalRawCost,
+        effectiveCostPerKgSellable,
+        notes: notes || null,
+        updatedBy: session.username,
+        updatedAt: new Date()
+      }
+    }
+  );
 
   revalidatePath("/inventory");
   revalidatePath("/dashboard");
@@ -221,7 +283,7 @@ export default async function InventoryPage() {
       <section className="card p-5">
         <h2 className="text-lg font-semibold">Batch Table</h2>
         <div className="mt-4 overflow-x-auto">
-          <table className="w-full min-w-[980px] border-collapse">
+          <table className="w-full min-w-[1100px] border-collapse">
             <thead>
               <tr className="border-b border-zinc-300 text-left text-xs uppercase tracking-wide text-zinc-500">
                 <th className="py-2">Fish</th>
@@ -244,49 +306,18 @@ export default async function InventoryPage() {
                   </td>
                 </tr>
               ) : (
-                batches.map((batch) => {
-                  // Calculate waste kg (either manual or percentage-based)
-                  const wasteKg = batch.manualWasteKg !== null && batch.manualWasteKg !== undefined && batch.manualWasteKg > 0
-                    ? batch.manualWasteKg
-                    : batch.wastePercent !== null && batch.wastePercent !== undefined
-                      ? batch.initialKg * batch.wastePercent / 100
-                      : 0;
-                  
-                  // Sold = Initial - Waste - Remaining
-                  const soldKg = Math.max(0, batch.initialKg - wasteKg - batch.remainingKg);
-                  
-                  return (
-                    <tr key={batch._id.toString()} className="border-b border-zinc-200 text-sm">
-                      <td className="py-2 font-medium">{batch.fishName}</td>
-                      <td className="py-2">{new Date(batch.purchaseDate).toLocaleDateString()}</td>
-                      <td className="py-2">{formatKg(batch.initialKg)}</td>
-                      <td className="py-2 font-medium text-blue-600">{formatKg(soldKg)}</td>
-                      <td className="py-2">{formatKg(batch.remainingKg)}</td>
-                      <td className="py-2">
-                        {batch.manualWasteKg !== null && batch.manualWasteKg !== undefined && batch.manualWasteKg > 0 ? (
-                          <span title="Manual waste kg">{formatKg(batch.manualWasteKg)} kg</span>
-                        ) : (
-                          <span>{batch.wastePercent !== null && batch.wastePercent !== undefined ? Number(batch.wastePercent).toFixed(2) : "0"}%</span>
-                        )}
-                      </td>
-                      <td className="py-2">{formatMoney(batch.buyPricePerKgRaw)}</td>
-                      <td className="py-2">{formatMoney(batch.effectiveCostPerKgSellable)}</td>
-                      <td className="py-2">{formatMoney(batch.totalRawCost)}</td>
-                      <td className="py-2">
-                        {canEdit ? (
-                          <form action={deleteBatchAction}>
-                            <input type="hidden" name="id" value={batch._id.toString()} />
-                            <button type="submit" className="btn-white text-xs">
-                              Delete
-                            </button>
-                          </form>
-                        ) : (
-                          <span className="text-xs text-zinc-500">No access</span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })
+                batches.map((batch) => (
+                  <InventoryTableRow
+                    key={batch._id.toString()}
+                    batch={batch}
+                    onDelete={async (id) => {
+                      const formData = new FormData();
+                      formData.append("id", id);
+                      await deleteBatchAction(formData);
+                    }}
+                    canEdit={canEdit}
+                  />
+                ))
               )}
             </tbody>
           </table>

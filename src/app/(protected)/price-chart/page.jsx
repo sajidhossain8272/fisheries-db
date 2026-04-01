@@ -6,6 +6,7 @@ import { formatMoney, toNumber, round2 } from "@/lib/number";
 import { getSession } from "@/lib/hard-auth";
 import { canManageInventory } from "@/lib/roles";
 import Link from "next/link";
+import { PriceChartTableRow } from "@/components/price-chart-table-row";
 
 async function addPriceChartAction(formData) {
   "use server";
@@ -121,7 +122,7 @@ export default async function PriceChartPage() {
           <p className="text-sm text-zinc-500">No prices set yet.</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[600px] border-collapse">
+            <table className="w-full min-w-[800px] border-collapse">
               <thead>
                 <tr className="border-b border-zinc-300 text-left text-xs uppercase tracking-wide text-zinc-500">
                   <th className="py-2">Fish Name</th>
@@ -129,17 +130,19 @@ export default async function PriceChartPage() {
                   <th className="py-2">Notes</th>
                   <th className="py-2">Last Updated</th>
                   <th className="py-2">By</th>
+                  <th className="py-2">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {currentPrices.map((price) => (
-                  <tr key={price._id.toString()} className="border-b border-zinc-200 text-sm">
-                    <td className="py-2 font-medium">{price.fishName}</td>
-                    <td className="py-2">{formatMoney(price.sellingPrice)}</td>
-                    <td className="py-2 text-zinc-600">{price.notes || "—"}</td>
-                    <td className="py-2">{new Date(price.lastUpdatedAt).toLocaleDateString()}</td>
-                    <td className="py-2">{price.lastUpdatedBy}</td>
-                  </tr>
+                  <PriceChartTableRow
+                    key={price._id.toString()}
+                    price={price}
+                    onDelete={async (id) => {
+                      // Delete is handled in the row component
+                    }}
+                    canEdit={canEdit}
+                  />
                 ))}
               </tbody>
             </table>
