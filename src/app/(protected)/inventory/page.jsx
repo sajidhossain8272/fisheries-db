@@ -4,6 +4,7 @@ import { getDb } from "@/lib/mongodb";
 import { canManageInventory } from "@/lib/roles";
 import { getSession } from "@/lib/hard-auth";
 import { formatKg, formatMoney, round2, toNumber } from "@/lib/number";
+import { InventoryBatchForm } from "@/components/inventory-form";
 
 async function createBatchAction(formData) {
   "use server";
@@ -133,41 +134,7 @@ export default async function InventoryPage() {
           FIFO costing: sales always consume oldest purchase-date batches first, so remaining old stock keeps old cost.
         </p>
         {canEdit ? (
-          <form action={createBatchAction} className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-7">
-            <input name="fishName" className="input" placeholder="Fish name" required />
-            <input name="purchaseDate" className="input" type="date" required />
-            <input name="initialKg" className="input" type="number" min="0.01" step="0.01" placeholder="Raw kg" required />
-            <input
-              name="wastePercent"
-              className="input"
-              type="number"
-              min="0"
-              max="99.99"
-              step="0.01"
-              placeholder="Waste %"
-            />
-            <input
-              name="manualWasteKg"
-              className="input"
-              type="number"
-              min="0"
-              step="0.01"
-              placeholder="Manual waste kg (leave empty for %)"
-            />
-            <input
-              name="buyPricePerKgRaw"
-              className="input"
-              type="number"
-              min="0.01"
-              step="0.01"
-              placeholder="Buy price/kg"
-              required
-            />
-            <input name="notes" className="input" placeholder="Notes (optional)" />
-            <button className="btn-black md:col-span-2 xl:col-span-7" type="submit">
-              Add Inventory Batch
-            </button>
-          </form>
+          <InventoryBatchForm action={createBatchAction} />
         ) : (
           <p className="mt-4 rounded-md border border-zinc-300 bg-zinc-50 p-3 text-sm">
             Employee role can view batches but cannot create or delete inventory entries.
