@@ -11,30 +11,34 @@ export function SalesEntryForm({ action, fishOptions, inventorySummary }) {
 
   const fishInventory = useMemo(() => {
     const map = {};
-    inventorySummary.forEach((item) => {
-      map[item._id] = {
-        remainingKg: item.remainingKg,
-        avgEffectiveCost: item.avgEffectiveCost || 0
-      };
-    });
+    if (Array.isArray(inventorySummary)) {
+      inventorySummary.forEach((item) => {
+        if (item && item._id) {
+          map[item._id] = {
+            remainingKg: Number(item.remainingKg || 0),
+            avgEffectiveCost: Number(item.avgEffectiveCost || 0)
+          };
+        }
+      });
+    }
     return map;
   }, [inventorySummary]);
 
   const availableKg = fishInventory[selectedFish]?.remainingKg || 0;
   const effectiveCostPerKg = fishInventory[selectedFish]?.avgEffectiveCost || 0;
-  const parsedQuantity = parseFloat(quantityKg) || 0;
-  const parsedSalePrice = parseFloat(salePricePerKg) || 0;
+  const parsedQuantity = Math.max(0, parseFloat(quantityKg) || 0);
+  const parsedSalePrice = Math.max(0, parseFloat(salePricePerKg) || 0);
 
-  // Calculate profit
-  const profitPerKg = parsedSalePrice - effectiveCostPerKg;
-  const totalProfit = profitPerKg * parsedQuantity;
-  const totalRevenue = parsedSalePrice * parsedQuantity;
-  const totalCogs = effectiveCostPerKg * parsedQuantity;
+  // Calculate profit (with guards against NaN)
+  const profitPerKg = isFinite(parsedSalePrice - effectiveCostPerKg) ? parsedSalePrice - effectiveCostPerKg : 0;
+  const totalProfit = isFinite(profitPerKg * parsedQuantity) ? profitPerKg * parsedQuantity : 0;
+  const totalRevenue = isFinite(parsedSalePrice * parsedQuantity) ? parsedSalePrice * parsedQuantity : 0;
+  const totalCogs = isFinite(effectiveCostPerKg * parsedQuantity) ? effectiveCostPerKg * parsedQuantity : 0;
 
   // Donation (5%)
-  const grossProfit = totalRevenue - totalCogs;
+  const grossProfit = isFinite(totalRevenue - totalCogs) ? totalRevenue - totalCogs : 0;
   const donation = grossProfit > 0 ? grossProfit * 0.05 : 0;
-  const netProfit = grossProfit - donation;
+  const netProfit = isFinite(grossProfit - donation) ? grossProfit - donation : 0;
 
   const exceedsInventory = selectedFish && parsedQuantity > availableKg && availableKg > 0;
   const isLowStock = selectedFish && availableKg < 20 && availableKg > 0;

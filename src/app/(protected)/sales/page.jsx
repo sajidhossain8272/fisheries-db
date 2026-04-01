@@ -11,40 +11,44 @@ import { SalesEntryForm } from "@/components/sales-entry-form";
 async function createSaleAction(formData) {
   "use server";
 
-  const session = await getSession();
-  if (!session || !canManageSales(session.role)) {
-    throw new Error("Permission denied for sales.");
-  }
-
-  const fishName = String(formData.get("fishName") || "").trim();
-  const quantityKg = toNumber(formData.get("quantityKg"));
-  const salePricePerKg = toNumber(formData.get("salePricePerKg"));
-  const saleDateRaw = String(formData.get("saleDate") || "").trim();
-  const saleDate = saleDateRaw ? new Date(saleDateRaw) : new Date();
-
-  if (!fishName || quantityKg <= 0 || salePricePerKg <= 0 || Number.isNaN(saleDate.getTime())) {
-    throw new Error("Invalid sale input.");
-  }
-
   try {
-    await recordSaleFIFO({
+    const session = await getSession();
+    if (!session || !canManageSales(session.role)) {
+      throw new Error("Permission denied for sales.");
+    }
+
+    const fishName = String(formData.get("fishName") || "").trim();
+    const quantityKg = toNumber(formData.get("quantityKg"));
+    const salePricePerKg = toNumber(formData.get("salePricePerKg"));
+    const saleDateRaw = String(formData.get("saleDate") || "").trim();
+    const saleDate = saleDateRaw ? new Date(saleDateRaw) : new Date();
+
+    if (!fishName || quantityKg <= 0 || salePricePerKg <= 0 || Number.isNaN(saleDate.getTime())) {
+      throw new Error("Invalid sale input. Check fish name, quantity, and price.");
+    }
+
+    const result = await recordSaleFIFO({
       fishName,
       quantityKg,
       salePricePerKg,
       saleDate,
       actorUsername: session.username
     });
+
+    console.log("Sale recorded successfully:", result);
   } catch (error) {
     console.error("Sales recording error:", error);
     throw new Error(error?.message || "Failed to record sale. Please try again.");
   }
 
+  // Revalidate paths after successful sale
   try {
     revalidatePath("/sales");
     revalidatePath("/inventory");
     revalidatePath("/dashboard");
-  } catch (error) {
-    console.error("Revalidation error:", error);
+  } catch (revalidateError) {
+    console.error("Revalidation error:", revalidateError);
+    // Don't throw - revalidation errors shouldn't fail the request
   }
 
   redirect("/sales");
@@ -142,51 +146,75 @@ async function getSalesData(searchParams) {
     const start = new Date(startDate);
     const end = new Date(endDate);
     end.setHours(23, 59, 59, 999);
-    dateFilter = { saleDate: { $gte: start, $lte: end } };
+    if (!Number.isNaN(start.getTime()) && !Number.isNaN(end.getTime())) {
+      dateFilter = { saleDate: { $gte: start, $lte: end } };
+    }
   } else if (filterType === "month" && filterMonth) {
     const [year, month] = filterMonth.split("-");
-    const start = new Date(parseInt(year), parseInt(month) - 1, 1);
-    const end = new Date(parseInt(year), parseInt(month), 0, 23, 59, 59, 999);
-    dateFilter = { saleDate: { $gte: start, $lte: end } };
+    if (year && month) {
+      const start = new Date(parseInt(year), parseInt(month) - 1, 1);
+      const end = new Date(parseInt(year), parseInt(month), 0, 23, 59, 59, 999);
+      if (!Number.isNaN(start.getTime()) && !Number.isNaN(end.getTime())) {
+        dateFilter = { saleDate: { $gte: start, $lte: end } };
+      }
+    }
   }
   
-  const [fishOptions, recentSales, totalCount, inventorySummary] = await Promise.all([
-    db.collection("inventory_batches").distinct("fishName", { remainingKg: { $gt: 0 } }),
-    db.collection("sales")
-      .find(dateFilter)
-      .sort({ saleDate: -1 })
-      .skip(skip)
-      .limit(pageSize)
-      .toArray(),
-    db.collection("sales").countDocuments(dateFilter),
-    db
-      .collection("inventory_batches")
-      .aggregate([
-        { $match: { remainingKg: { $gt: 0 } } },
-        { $group: { 
-          _id: "$fishName", 
-          remainingKg: { $sum: "$remainingKg" },
-          avgEffectiveCost: { $avg: "$effectiveCostPerKgSellable" }
-        } }
-      ])
-      .toArray()
-  ]);
-  
-  const totalPages = Math.ceil(totalCount / pageSize);
-  
-  return { 
-    fishOptions: fishOptions.sort(), 
-    recentSales,
-    inventorySummary,
-    currentPage: page,
-    totalPages,
-    totalCount,
-    pageSize,
-    filterType,
-    startDate,
-    endDate,
-    filterMonth
-  };
+  try {
+    const [fishOptions, recentSales, totalCount, inventorySummary] = await Promise.all([
+      db.collection("inventory_batches").distinct("fishName", { remainingKg: { $gt: 0 } }),
+      db.collection("sales")
+        .find(dateFilter)
+        .sort({ saleDate: -1 })
+        .skip(skip)
+        .limit(pageSize)
+        .toArray(),
+      db.collection("sales").countDocuments(dateFilter),
+      db
+        .collection("inventory_batches")
+        .aggregate([
+          { $match: { remainingKg: { $gt: 0 } } },
+          { $group: { 
+            _id: "$fishName", 
+            remainingKg: { $sum: "$remainingKg" },
+            avgEffectiveCost: { $avg: "$effectiveCostPerKgSellable" }
+          } }
+        ])
+        .toArray()
+    ]);
+    
+    const totalPages = Math.ceil(totalCount / pageSize);
+    
+    return { 
+      fishOptions: Array.isArray(fishOptions) ? fishOptions.sort() : [],
+      recentSales: Array.isArray(recentSales) ? recentSales : [],
+      inventorySummary: Array.isArray(inventorySummary) ? inventorySummary : [],
+      currentPage: page,
+      totalPages,
+      totalCount,
+      pageSize,
+      filterType,
+      startDate,
+      endDate,
+      filterMonth
+    };
+  } catch (error) {
+    console.error("getSalesData error:", error);
+    // Return safe defaults on error
+    return { 
+      fishOptions: [],
+      recentSales: [],
+      inventorySummary: [],
+      currentPage: 1,
+      totalPages: 0,
+      totalCount: 0,
+      pageSize: 15,
+      filterType,
+      startDate,
+      endDate,
+      filterMonth
+    };
+  }
 }
 
 export default async function SalesPage({ searchParams }) {
