@@ -245,8 +245,16 @@ export default async function InventoryPage() {
                 </tr>
               ) : (
                 batches.map((batch) => {
-                  const wasteKg = batch.initialKg - batch.remainingKg - (batch.manualWasteKg || (batch.initialKg * batch.wastePercent / 100));
-                  const soldKg = Math.max(0, batch.initialKg - batch.remainingKg - (batch.manualWasteKg || (batch.initialKg * batch.wastePercent / 100)));
+                  // Calculate waste kg (either manual or percentage-based)
+                  const wasteKg = batch.manualWasteKg !== null && batch.manualWasteKg !== undefined && batch.manualWasteKg > 0
+                    ? batch.manualWasteKg
+                    : batch.wastePercent !== null && batch.wastePercent !== undefined
+                      ? batch.initialKg * batch.wastePercent / 100
+                      : 0;
+                  
+                  // Sold = Initial - Waste - Remaining
+                  const soldKg = Math.max(0, batch.initialKg - wasteKg - batch.remainingKg);
+                  
                   return (
                     <tr key={batch._id.toString()} className="border-b border-zinc-200 text-sm">
                       <td className="py-2 font-medium">{batch.fishName}</td>
@@ -255,10 +263,10 @@ export default async function InventoryPage() {
                       <td className="py-2 font-medium text-blue-600">{formatKg(soldKg)}</td>
                       <td className="py-2">{formatKg(batch.remainingKg)}</td>
                       <td className="py-2">
-                        {batch.manualWasteKg ? (
+                        {batch.manualWasteKg !== null && batch.manualWasteKg !== undefined && batch.manualWasteKg > 0 ? (
                           <span title="Manual waste kg">{formatKg(batch.manualWasteKg)} kg</span>
                         ) : (
-                          <span>{Number(batch.wastePercent).toFixed(2)}%</span>
+                          <span>{batch.wastePercent !== null && batch.wastePercent !== undefined ? Number(batch.wastePercent).toFixed(2) : "0"}%</span>
                         )}
                       </td>
                       <td className="py-2">{formatMoney(batch.buyPricePerKgRaw)}</td>
