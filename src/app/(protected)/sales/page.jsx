@@ -163,7 +163,11 @@ async function getSalesData(searchParams) {
       .collection("inventory_batches")
       .aggregate([
         { $match: { remainingKg: { $gt: 0 } } },
-        { $group: { _id: "$fishName", remainingKg: { $sum: "$remainingKg" } } }
+        { $group: { 
+          _id: "$fishName", 
+          remainingKg: { $sum: "$remainingKg" },
+          avgEffectiveCost: { $avg: "$effectiveCostPerKgSellable" }
+        } }
       ])
       .toArray()
   ]);
