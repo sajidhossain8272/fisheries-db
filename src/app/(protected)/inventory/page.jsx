@@ -2,7 +2,6 @@ import { ObjectId } from "mongodb";
 import { revalidatePath } from "next/cache";
 import { getDb } from "@/lib/mongodb";
 import { canManageInventory } from "@/lib/roles";
-import { computeBatchMetrics } from "@/lib/fish-ops";
 import { getSession } from "@/lib/hard-auth";
 import { formatKg, formatMoney, round2, toNumber } from "@/lib/number";
 
@@ -18,6 +17,7 @@ async function createBatchAction(formData) {
   const purchaseDate = String(formData.get("purchaseDate") || "").trim();
   const initialKg = toNumber(formData.get("initialKg"));
   const wastePercent = toNumber(formData.get("wastePercent"), 10);
+  const manualWasteKg = toNumber(formData.get("manualWasteKg"));
   const buyPricePerKgRaw = toNumber(formData.get("buyPricePerKgRaw"));
   const notes = String(formData.get("notes") || "").trim();
 
@@ -34,22 +34,32 @@ async function createBatchAction(formData) {
     throw new Error("Invalid purchase date.");
   }
 
-  const metrics = computeBatchMetrics({
-    initialKg: round2(initialKg),
-    wastePercent: round2(wastePercent),
-    buyPricePerKgRaw: round2(buyPricePerKgRaw)
-  });
+  // Calculate actual waste kg: use manual if provided, otherwise calculate from %
+  let actualWasteKg = 0;
+  if (manualWasteKg > 0) {
+    actualWasteKg = round2(manualWasteKg);
+    if (actualWasteKg >= initialKg) {
+      throw new Error("Manual waste kg cannot be >= initial kg.");
+    }
+  } else {
+    actualWasteKg = round2(initialKg * (wastePercent / 100));
+  }
+
+  const sellableKg = round2(initialKg - actualWasteKg);
+  const totalRawCost = round2(initialKg * buyPricePerKgRaw);
+  const effectiveCostPerKgSellable = sellableKg > 0 ? round2(totalRawCost / sellableKg) : 0;
 
   const db = await getDb();
   await db.collection("inventory_batches").insertOne({
     fishName,
     purchaseDate: date,
     initialKg: round2(initialKg),
-    remainingKg: metrics.sellableKg,
+    remainingKg: sellableKg,
     wastePercent: round2(wastePercent),
+    manualWasteKg: manualWasteKg > 0 ? round2(manualWasteKg) : null,
     buyPricePerKgRaw: round2(buyPricePerKgRaw),
-    totalRawCost: metrics.totalRawCost,
-    effectiveCostPerKgSellable: metrics.effectiveCostPerKgSellable,
+    totalRawCost,
+    effectiveCostPerKgSellable,
     notes: notes || null,
     createdBy: session.username,
     createdAt: new Date(),
@@ -116,7 +126,7 @@ export default async function InventoryPage() {
           FIFO costing: sales always consume oldest purchase-date batches first, so remaining old stock keeps old cost.
         </p>
         {canEdit ? (
-          <form action={createBatchAction} className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+          <form action={createBatchAction} className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-7">
             <input name="fishName" className="input" placeholder="Fish name" required />
             <input name="purchaseDate" className="input" type="date" required />
             <input name="initialKg" className="input" type="number" min="0.01" step="0.01" placeholder="Raw kg" required />
@@ -131,6 +141,16 @@ export default async function InventoryPage() {
               placeholder="Waste %"
             />
             <input
+              name="manualWasteKg"
+              className="input"
+              type="number"
+              min="0"
+              step="0.01"
+              defaultValue="0"
+              placeholder="Manual waste kg"
+              title="Leave 0 to use waste %, or enter kg to override"
+            />
+            <input
               name="buyPricePerKgRaw"
               className="input"
               type="number"
@@ -140,7 +160,7 @@ export default async function InventoryPage() {
               required
             />
             <input name="notes" className="input" placeholder="Notes (optional)" />
-            <button className="btn-black md:col-span-2 xl:col-span-6" type="submit">
+            <button className="btn-black md:col-span-2 xl:col-span-7" type="submit">
               Add Inventory Batch
             </button>
           </form>
@@ -196,7 +216,13 @@ export default async function InventoryPage() {
                     <td className="py-2">{new Date(batch.purchaseDate).toLocaleDateString()}</td>
                     <td className="py-2">{formatKg(batch.initialKg)}</td>
                     <td className="py-2">{formatKg(batch.remainingKg)}</td>
-                    <td className="py-2">{Number(batch.wastePercent).toFixed(2)}%</td>
+                    <td className="py-2">
+                      {batch.manualWasteKg ? (
+                        <span title="Manual waste kg">{formatKg(batch.manualWasteKg)} kg</span>
+                      ) : (
+                        <span>{Number(batch.wastePercent).toFixed(2)}%</span>
+                      )}
+                    </td>
                     <td className="py-2">{formatMoney(batch.buyPricePerKgRaw)}</td>
                     <td className="py-2">{formatMoney(batch.effectiveCostPerKgSellable)}</td>
                     <td className="py-2">{formatMoney(batch.totalRawCost)}</td>
