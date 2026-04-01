@@ -3,11 +3,52 @@ import { getDb } from "@/lib/mongodb";
 import { formatKg, formatMoney } from "@/lib/number";
 import { toDayKey } from "@/lib/fish-ops";
 
-async function getDashboardData() {
+async function getDashboardData(searchParams) {
   const db = await getDb();
   const today = toDayKey(new Date());
 
-  const [inventoryRows, todaySales, recentSales] = await Promise.all([
+  // Parse filters - default to current month
+  const filterType = searchParams?.filterType || "month";
+  const startDate = searchParams?.startDate || "";
+  const endDate = searchParams?.endDate || "";
+  const filterMonth = searchParams?.month || "";
+
+  let dateFilter = {};
+  let periodLabel = "";
+  
+  // Default to current month
+  if (filterType === "month" && !filterMonth) {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const monthStr = `${year}-${month}`;
+    
+    const start = new Date(parseInt(year), parseInt(month) - 1, 1);
+    const end = new Date(parseInt(year), parseInt(month), 0, 23, 59, 59, 999);
+    dateFilter = { saleDate: { $gte: start, $lte: end } };
+    periodLabel = `This Month (${monthStr})`;
+  } else if (filterType === "date" && startDate && endDate) {
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    end.setHours(23, 59, 59, 999);
+    dateFilter = { saleDate: { $gte: start, $lte: end } };
+    periodLabel = `${startDate} to ${endDate}`;
+  } else if (filterType === "month" && filterMonth) {
+    const [year, month] = filterMonth.split("-");
+    const start = new Date(parseInt(year), parseInt(month) - 1, 1);
+    const end = new Date(parseInt(year), parseInt(month), 0, 23, 59, 59, 999);
+    dateFilter = { saleDate: { $gte: start, $lte: end } };
+    periodLabel = filterMonth;
+  } else if (filterType === "today") {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 59, 999);
+    dateFilter = { saleDate: { $gte: todayStart, $lte: todayEnd } };
+    periodLabel = "Today";
+  }
+
+  const [inventoryRows, periodSales, recentSales, todaySales] = await Promise.all([
     db
       .collection("inventory_batches")
       .aggregate([
@@ -16,6 +57,24 @@ async function getDashboardData() {
         { $sort: { _id: 1 } }
       ])
       .toArray(),
+    db
+      .collection("sales")
+      .aggregate([
+        { $match: dateFilter },
+        {
+          $group: {
+            _id: null,
+            revenue: { $sum: "$revenue" },
+            grossProfit: { $sum: "$grossProfit" },
+            donation: { $sum: "$donationAmount" },
+            netProfit: { $sum: "$netProfit" },
+            soldKg: { $sum: "$quantityKg" },
+            count: { $sum: 1 }
+          }
+        }
+      ])
+      .toArray(),
+    db.collection("sales").find({}).sort({ saleDate: -1 }).limit(8).toArray(),
     db
       .collection("sales")
       .aggregate([
@@ -31,11 +90,11 @@ async function getDashboardData() {
           }
         }
       ])
-      .toArray(),
-    db.collection("sales").find({}).sort({ saleDate: -1 }).limit(8).toArray()
+      .toArray()
   ]);
 
   const stockKg = inventoryRows.reduce((sum, row) => sum + Number(row.remainingKg || 0), 0);
+  const periodRow = periodSales[0] || { revenue: 0, grossProfit: 0, donation: 0, netProfit: 0, soldKg: 0, count: 0 };
   const todayRow = todaySales[0] || { revenue: 0, grossProfit: 0, donation: 0, netProfit: 0, soldKg: 0 };
 
   return {
@@ -43,7 +102,13 @@ async function getDashboardData() {
     stockKg,
     fishTypes: inventoryRows.length,
     todayRow,
-    recentSales
+    periodRow,
+    recentSales,
+    filterType,
+    startDate,
+    endDate,
+    filterMonth,
+    periodLabel
   };
 }
 
@@ -57,20 +122,106 @@ function StatCard({ label, value, hint }) {
   );
 }
 
-export default async function DashboardPage() {
-  const data = await getDashboardData();
+export default async function DashboardPage({ searchParams }) {
+  const data = await getDashboardData(searchParams);
 
   return (
     <div className="space-y-6">
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Stock Available" value={formatKg(data.stockKg)} hint={`${data.fishTypes} fish types`} />
-        <StatCard label={`Revenue (${data.today})`} value={formatMoney(data.todayRow.revenue)} />
-        <StatCard
-          label="Gross Profit"
-          value={formatMoney(data.todayRow.grossProfit)}
-          hint={`Donation 5%: ${formatMoney(data.todayRow.donation)}`}
-        />
-        <StatCard label="Net Profit After Donation" value={formatMoney(data.todayRow.netProfit)} />
+      {/* Filter Controls */}
+      <section className="card p-5">
+        <h3 className="text-sm font-semibold mb-3">Filter Period</h3>
+        <div className="flex flex-wrap gap-2 items-center text-sm mb-3">
+          <a
+            href="?filterType=today"
+            className={`px-3 py-1 rounded ${data.filterType === "today" ? "bg-black text-white" : "bg-zinc-200 text-black"}`}
+          >
+            Today
+          </a>
+          <a
+            href="?filterType=month"
+            className={`px-3 py-1 rounded ${data.filterType === "month" && !data.filterMonth ? "bg-black text-white" : "bg-zinc-200 text-black"}`}
+          >
+            This Month
+          </a>
+          <a
+            href="?filterType=month&month=custom"
+            className={`px-3 py-1 rounded ${data.filterMonth ? "bg-black text-white" : "bg-zinc-200 text-black"}`}
+          >
+            Select Month
+          </a>
+          <a
+            href="?filterType=date"
+            className={`px-3 py-1 rounded ${data.filterType === "date" ? "bg-black text-white" : "bg-zinc-200 text-black"}`}
+          >
+            Date Range
+          </a>
+        </div>
+
+        {/* Month Selector */}
+        {data.filterMonth && (
+          <form className="flex gap-2 items-end">
+            <div>
+              <label className="block text-xs text-zinc-600 mb-1">Select Month</label>
+              <input
+                type="month"
+                name="month"
+                defaultValue={data.filterMonth !== "custom" ? data.filterMonth : ""}
+                className="input"
+              />
+            </div>
+            <button type="submit" className="btn-black text-sm">
+              Filter
+            </button>
+          </form>
+        )}
+
+        {/* Date Range */}
+        {data.filterType === "date" && (
+          <form className="flex gap-2 flex-wrap items-end">
+            <div>
+              <label className="block text-xs text-zinc-600 mb-1">Start Date</label>
+              <input
+                type="date"
+                name="startDate"
+                defaultValue={data.startDate}
+                className="input"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-zinc-600 mb-1">End Date</label>
+              <input
+                type="date"
+                name="endDate"
+                defaultValue={data.endDate}
+                className="input"
+                required
+              />
+            </div>
+            <button type="submit" className="btn-black text-sm">
+              Filter
+            </button>
+          </form>
+        )}
+      </section>
+
+      {/* Stats Section */}
+      <section>
+        <p className="text-xs text-zinc-600 mb-3">Period: {data.periodLabel}</p>
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <StatCard label="Stock Available" value={formatKg(data.stockKg)} hint={`${data.fishTypes} fish types`} />
+          <StatCard 
+            label={`Revenue (${data.periodLabel})`} 
+            value={formatMoney(data.periodRow.revenue)}
+            hint={`${data.periodRow.count} transactions`}
+          />
+          <StatCard
+            label="Gross Profit"
+            value={formatMoney(data.periodRow.grossProfit)}
+            hint={`Donation 5%: ${formatMoney(data.periodRow.donation)}`}
+          />
+          <StatCard label="Net Profit After Donation" value={formatMoney(data.periodRow.netProfit)} />
+        </div>
       </section>
 
       <section className="card p-5">
