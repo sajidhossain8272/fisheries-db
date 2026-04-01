@@ -115,6 +115,7 @@ function FilterMonthForm({ filterMonth }) {
 }
 
 
+async function getSalesData(searchParams) {
   const db = await getDb();
   
   // Parse filters
