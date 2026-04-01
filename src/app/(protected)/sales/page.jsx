@@ -6,6 +6,7 @@ import { canManageSales } from "@/lib/roles";
 import { formatKg, formatMoney, toNumber } from "@/lib/number";
 import { recordSaleFIFO } from "@/lib/fish-ops";
 import { getSession } from "@/lib/hard-auth";
+import { SalesEntryForm } from "@/components/sales-entry-form";
 
 async function createSaleAction(formData) {
   "use server";
@@ -149,7 +150,7 @@ async function getSalesData(searchParams) {
     dateFilter = { saleDate: { $gte: start, $lte: end } };
   }
   
-  const [fishOptions, recentSales, totalCount] = await Promise.all([
+  const [fishOptions, recentSales, totalCount, inventorySummary] = await Promise.all([
     db.collection("inventory_batches").distinct("fishName", { remainingKg: { $gt: 0 } }),
     db.collection("sales")
       .find(dateFilter)
@@ -157,7 +158,14 @@ async function getSalesData(searchParams) {
       .skip(skip)
       .limit(pageSize)
       .toArray(),
-    db.collection("sales").countDocuments(dateFilter)
+    db.collection("sales").countDocuments(dateFilter),
+    db
+      .collection("inventory_batches")
+      .aggregate([
+        { $match: { remainingKg: { $gt: 0 } } },
+        { $group: { _id: "$fishName", remainingKg: { $sum: "$remainingKg" } } }
+      ])
+      .toArray()
   ]);
   
   const totalPages = Math.ceil(totalCount / pageSize);
@@ -165,6 +173,7 @@ async function getSalesData(searchParams) {
   return { 
     fishOptions: fishOptions.sort(), 
     recentSales,
+    inventorySummary,
     currentPage: page,
     totalPages,
     totalCount,
@@ -180,6 +189,7 @@ export default async function SalesPage({ searchParams }) {
   const { 
     fishOptions, 
     recentSales, 
+    inventorySummary,
     currentPage, 
     totalPages, 
     totalCount,
@@ -196,32 +206,7 @@ export default async function SalesPage({ searchParams }) {
         <p className="mt-2 text-sm text-zinc-600">
           Sales use FIFO inventory allocation. Complexity is O(b) where b is number of available batches for the fish.
         </p>
-        <form action={createSaleAction} className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-          <select name="fishName" className="input" required defaultValue="">
-            <option value="" disabled>
-              Select fish
-            </option>
-            {fishOptions.map((fish) => (
-              <option key={fish} value={fish}>
-                {fish}
-              </option>
-            ))}
-          </select>
-          <input name="quantityKg" className="input" type="number" step="0.01" min="0.01" placeholder="Qty kg" required />
-          <input
-            name="salePricePerKg"
-            className="input"
-            type="number"
-            step="0.01"
-            min="0.01"
-            placeholder="Sale price/kg"
-            required
-          />
-          <input name="saleDate" className="input" type="datetime-local" />
-          <button type="submit" className="btn-black">
-            Record Sale
-          </button>
-        </form>
+        <SalesEntryForm action={createSaleAction} fishOptions={fishOptions} inventorySummary={inventorySummary} />
       </section>
 
       <section className="card p-5">

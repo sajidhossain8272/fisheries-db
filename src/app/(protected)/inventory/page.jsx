@@ -5,6 +5,7 @@ import { canManageInventory } from "@/lib/roles";
 import { getSession } from "@/lib/hard-auth";
 import { formatKg, formatMoney, round2, toNumber } from "@/lib/number";
 import { InventoryBatchForm } from "@/components/inventory-form";
+import { LowInventoryAlert } from "@/components/low-inventory-alert";
 
 async function createBatchAction(formData) {
   "use server";
@@ -146,13 +147,38 @@ export default async function InventoryPage() {
         {summary.length === 0 ? (
           <p className="text-sm text-zinc-500">No inventory summary available.</p>
         ) : (
-          summary.map((row) => (
-            <article key={row._id} className="card p-4">
-              <p className="label">{row._id}</p>
-              <p className="mt-1 text-xl font-semibold">{formatKg(row.remainingKg)}</p>
-              <p className="text-sm text-zinc-600">Avg. effective cost {formatMoney(row.avgEffectiveCost)}/kg</p>
-            </article>
-          ))
+          summary.map((row) => {
+            const isLowStock = row.remainingKg < 20;
+            return (
+              <article
+                key={row._id}
+                className={`card p-4 ${isLowStock ? "border-yellow-300 bg-yellow-50" : ""}`}
+              >
+                <div className="flex items-start justify-between">
+                  <div>
+                    <p className="label">{row._id}</p>
+                    <p className="mt-1 text-xl font-semibold">{formatKg(row.remainingKg)}</p>
+                    <p className="text-sm text-zinc-600">
+                      Avg. effective cost {formatMoney(row.avgEffectiveCost)}/kg
+                    </p>
+                  </div>
+                  {isLowStock && (
+                    <svg
+                      className="w-6 h-6 text-yellow-600 flex-shrink-0"
+                      fill="currentColor"
+                      viewBox="0 0 20 20"
+                    >
+                      <path
+                        fillRule="evenodd"
+                        d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
+                        clipRule="evenodd"
+                      />
+                    </svg>
+                  )}
+                </div>
+              </article>
+            );
+          })
         )}
       </section>
 

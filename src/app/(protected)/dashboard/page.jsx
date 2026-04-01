@@ -2,6 +2,7 @@ import Link from "next/link";
 import { getDb } from "@/lib/mongodb";
 import { formatKg, formatMoney } from "@/lib/number";
 import { toDayKey } from "@/lib/fish-ops";
+import { LowInventoryAlert } from "@/components/low-inventory-alert";
 
 async function getDashboardData(searchParams) {
   const db = await getDb();
@@ -96,6 +97,7 @@ async function getDashboardData(searchParams) {
   const stockKg = inventoryRows.reduce((sum, row) => sum + Number(row.remainingKg || 0), 0);
   const periodRow = periodSales[0] || { revenue: 0, grossProfit: 0, donation: 0, netProfit: 0, soldKg: 0, count: 0 };
   const todayRow = todaySales[0] || { revenue: 0, grossProfit: 0, donation: 0, netProfit: 0, soldKg: 0 };
+  const lowStockItems = inventoryRows.filter((item) => item.remainingKg < 20);
 
   return {
     today,
@@ -104,6 +106,7 @@ async function getDashboardData(searchParams) {
     todayRow,
     periodRow,
     recentSales,
+    lowStockItems,
     filterType,
     startDate,
     endDate,
@@ -223,6 +226,21 @@ export default async function DashboardPage({ searchParams }) {
           <StatCard label="Net Profit After Donation" value={formatMoney(data.periodRow.netProfit)} />
         </div>
       </section>
+
+      {/* Low Stock Alert Section */}
+      {data.lowStockItems.length > 0 && (
+        <section className="card p-5">
+          <h2 className="text-lg font-semibold mb-3">Low Stock Alerts</h2>
+          <div className="space-y-2">
+            {data.lowStockItems.map((item) => (
+              <LowInventoryAlert
+                key={item._id}
+                message={`${item._id}: Only ${formatKg(item.remainingKg)} available (less than 20kg threshold)`}
+              />
+            ))}
+          </div>
+        </section>
+      )}
 
       <section className="card p-5">
         <div className="flex items-center justify-between">
