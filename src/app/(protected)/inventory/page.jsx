@@ -16,7 +16,7 @@ async function createBatchAction(formData) {
   const fishName = String(formData.get("fishName") || "").trim();
   const purchaseDate = String(formData.get("purchaseDate") || "").trim();
   const initialKg = toNumber(formData.get("initialKg"));
-  const wastePercent = toNumber(formData.get("wastePercent"), 10);
+  const wastePercent = toNumber(formData.get("wastePercent"));
   const manualWasteKg = toNumber(formData.get("manualWasteKg"));
   const buyPricePerKgRaw = toNumber(formData.get("buyPricePerKgRaw"));
   const notes = String(formData.get("notes") || "").trim();
@@ -25,7 +25,12 @@ async function createBatchAction(formData) {
     throw new Error("Invalid batch input.");
   }
 
-  if (wastePercent < 0 || wastePercent >= 100) {
+  // Either wastePercent or manualWasteKg must be provided
+  if (wastePercent < 0 && manualWasteKg <= 0) {
+    throw new Error("Provide either waste % or manual waste kg.");
+  }
+
+  if (wastePercent >= 0 && (wastePercent >= 100)) {
     throw new Error("Waste percentage must be between 0 and 99.99.");
   }
 
@@ -41,8 +46,10 @@ async function createBatchAction(formData) {
     if (actualWasteKg >= initialKg) {
       throw new Error("Manual waste kg cannot be >= initial kg.");
     }
-  } else {
+  } else if (wastePercent >= 0) {
     actualWasteKg = round2(initialKg * (wastePercent / 100));
+  } else {
+    throw new Error("Provide either waste % or manual waste kg.");
   }
 
   const sellableKg = round2(initialKg - actualWasteKg);
@@ -55,7 +62,7 @@ async function createBatchAction(formData) {
     purchaseDate: date,
     initialKg: round2(initialKg),
     remainingKg: sellableKg,
-    wastePercent: round2(wastePercent),
+    wastePercent: wastePercent >= 0 ? round2(wastePercent) : null,
     manualWasteKg: manualWasteKg > 0 ? round2(manualWasteKg) : null,
     buyPricePerKgRaw: round2(buyPricePerKgRaw),
     totalRawCost,
@@ -137,7 +144,6 @@ export default async function InventoryPage() {
               min="0"
               max="99.99"
               step="0.01"
-              defaultValue="10"
               placeholder="Waste %"
             />
             <input
@@ -146,9 +152,7 @@ export default async function InventoryPage() {
               type="number"
               min="0"
               step="0.01"
-              defaultValue="0"
-              placeholder="Manual waste kg"
-              title="Leave 0 to use waste %, or enter kg to override"
+              placeholder="Manual waste kg (leave empty for %)"
             />
             <input
               name="buyPricePerKgRaw"
