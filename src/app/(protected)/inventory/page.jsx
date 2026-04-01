@@ -103,7 +103,7 @@ async function deleteBatchAction(formData) {
 
 async function getInventoryRows() {
   const db = await getDb();
-  const [batches, summary] = await Promise.all([
+  const [batches, summary, soldByFish] = await Promise.all([
     db.collection("inventory_batches").find({}).sort({ purchaseDate: 1, createdAt: 1 }).toArray(),
     db
       .collection("inventory_batches")
@@ -112,14 +112,37 @@ async function getInventoryRows() {
           $group: {
             _id: "$fishName",
             remainingKg: { $sum: "$remainingKg" },
-            avgEffectiveCost: { $avg: "$effectiveCostPerKgSellable" }
+            avgEffectiveCost: { $avg: "$effectiveCostPerKgSellable" },
+            totalReceived: { $sum: "$initialKg" }
+          }
+        },
+        { $sort: { _id: 1 } }
+      ])
+      .toArray(),
+    db
+      .collection("sales")
+      .aggregate([
+        {
+          $group: {
+            _id: "$fishName",
+            totalSoldKg: { $sum: "$quantityKg" }
           }
         },
         { $sort: { _id: 1 } }
       ])
       .toArray()
   ]);
-  return { batches, summary };
+  
+  // Merge sold data into summary
+  const summaryWithSold = summary.map((row) => {
+    const sold = soldByFish.find((s) => s._id === row._id);
+    return {
+      ...row,
+      totalSoldKg: sold?.totalSoldKg || 0
+    };
+  });
+  
+  return { batches, summary: summaryWithSold };
 }
 
 export default async function InventoryPage() {
@@ -155,16 +178,29 @@ export default async function InventoryPage() {
                 className={`card p-4 ${isLowStock ? "border-yellow-300 bg-yellow-50" : ""}`}
               >
                 <div className="flex items-start justify-between">
-                  <div>
+                  <div className="flex-1">
                     <p className="label">{row._id}</p>
-                    <p className="mt-1 text-xl font-semibold">{formatKg(row.remainingKg)}</p>
-                    <p className="text-sm text-zinc-600">
-                      Avg. effective cost {formatMoney(row.avgEffectiveCost)}/kg
+                    <div className="mt-2 space-y-1">
+                      <div className="flex justify-between">
+                        <span className="text-xs text-zinc-600">Remaining:</span>
+                        <span className="text-sm font-semibold">{formatKg(row.remainingKg)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-xs text-zinc-600">Sold:</span>
+                        <span className="text-sm font-semibold">{formatKg(row.totalSoldKg)}</span>
+                      </div>
+                      <div className="flex justify-between pt-1 border-t border-zinc-300">
+                        <span className="text-xs text-zinc-600">Received:</span>
+                        <span className="text-sm font-semibold">{formatKg(row.totalReceived)}</span>
+                      </div>
+                    </div>
+                    <p className="mt-2 text-xs text-zinc-600">
+                      Avg eff. cost {formatMoney(row.avgEffectiveCost)}/kg
                     </p>
                   </div>
                   {isLowStock && (
                     <svg
-                      className="w-6 h-6 text-yellow-600 flex-shrink-0"
+                      className="w-6 h-6 text-yellow-600 flex-shrink-0 ml-2"
                       fill="currentColor"
                       viewBox="0 0 20 20"
                     >
@@ -191,6 +227,7 @@ export default async function InventoryPage() {
                 <th className="py-2">Fish</th>
                 <th className="py-2">Purchase Date</th>
                 <th className="py-2">Initial</th>
+                <th className="py-2">Sold</th>
                 <th className="py-2">Remaining</th>
                 <th className="py-2">Waste</th>
                 <th className="py-2">Buy/kg</th>
@@ -202,41 +239,46 @@ export default async function InventoryPage() {
             <tbody>
               {batches.length === 0 ? (
                 <tr>
-                  <td className="py-4 text-sm text-zinc-500" colSpan={9}>
+                  <td className="py-4 text-sm text-zinc-500" colSpan={10}>
                     No batches found.
                   </td>
                 </tr>
               ) : (
-                batches.map((batch) => (
-                  <tr key={batch._id.toString()} className="border-b border-zinc-200 text-sm">
-                    <td className="py-2 font-medium">{batch.fishName}</td>
-                    <td className="py-2">{new Date(batch.purchaseDate).toLocaleDateString()}</td>
-                    <td className="py-2">{formatKg(batch.initialKg)}</td>
-                    <td className="py-2">{formatKg(batch.remainingKg)}</td>
-                    <td className="py-2">
-                      {batch.manualWasteKg ? (
-                        <span title="Manual waste kg">{formatKg(batch.manualWasteKg)} kg</span>
-                      ) : (
-                        <span>{Number(batch.wastePercent).toFixed(2)}%</span>
-                      )}
-                    </td>
-                    <td className="py-2">{formatMoney(batch.buyPricePerKgRaw)}</td>
-                    <td className="py-2">{formatMoney(batch.effectiveCostPerKgSellable)}</td>
-                    <td className="py-2">{formatMoney(batch.totalRawCost)}</td>
-                    <td className="py-2">
-                      {canEdit ? (
-                        <form action={deleteBatchAction}>
-                          <input type="hidden" name="id" value={batch._id.toString()} />
-                          <button type="submit" className="btn-white text-xs">
-                            Delete
-                          </button>
-                        </form>
-                      ) : (
-                        <span className="text-xs text-zinc-500">No access</span>
-                      )}
-                    </td>
-                  </tr>
-                ))
+                batches.map((batch) => {
+                  const wasteKg = batch.initialKg - batch.remainingKg - (batch.manualWasteKg || (batch.initialKg * batch.wastePercent / 100));
+                  const soldKg = Math.max(0, batch.initialKg - batch.remainingKg - (batch.manualWasteKg || (batch.initialKg * batch.wastePercent / 100)));
+                  return (
+                    <tr key={batch._id.toString()} className="border-b border-zinc-200 text-sm">
+                      <td className="py-2 font-medium">{batch.fishName}</td>
+                      <td className="py-2">{new Date(batch.purchaseDate).toLocaleDateString()}</td>
+                      <td className="py-2">{formatKg(batch.initialKg)}</td>
+                      <td className="py-2 font-medium text-blue-600">{formatKg(soldKg)}</td>
+                      <td className="py-2">{formatKg(batch.remainingKg)}</td>
+                      <td className="py-2">
+                        {batch.manualWasteKg ? (
+                          <span title="Manual waste kg">{formatKg(batch.manualWasteKg)} kg</span>
+                        ) : (
+                          <span>{Number(batch.wastePercent).toFixed(2)}%</span>
+                        )}
+                      </td>
+                      <td className="py-2">{formatMoney(batch.buyPricePerKgRaw)}</td>
+                      <td className="py-2">{formatMoney(batch.effectiveCostPerKgSellable)}</td>
+                      <td className="py-2">{formatMoney(batch.totalRawCost)}</td>
+                      <td className="py-2">
+                        {canEdit ? (
+                          <form action={deleteBatchAction}>
+                            <input type="hidden" name="id" value={batch._id.toString()} />
+                            <button type="submit" className="btn-white text-xs">
+                              Delete
+                            </button>
+                          </form>
+                        ) : (
+                          <span className="text-xs text-zinc-500">No access</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
