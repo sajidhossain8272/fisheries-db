@@ -9,7 +9,8 @@ export default async function LoginPage({ searchParams }) {
     redirect("/dashboard");
   }
 
-  const hasError = searchParams?.error === "1";
+  const resolvedSearchParams = await searchParams;
+  const hasError = resolvedSearchParams?.error === "1";
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-zinc-100 px-4 py-10">

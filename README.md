@@ -6,7 +6,7 @@ Next.js + Tailwind + MongoDB fish inventory and sales system, ready for Vercel d
 
 - Black/white clean admin UI branded as **Central Kitchen Khulna Fisheries**
 - MongoDB Atlas-ready data layer
-- Role-based login with hardcoded seeded users:
+- Role-based login with hardcoded env users:
   - `super_admin` (full access)
   - `admin` (inventory/product management)
   - `employee` (view inventory + manage sales)
@@ -38,17 +38,19 @@ Set these environment variables in Vercel Project Settings:
 
 - `MONGODB_URI`
 - `MONGODB_DB_NAME`
-- `NEXTAUTH_SECRET`
-- `NEXTAUTH_URL` (set to your production URL after deploy)
+- `AUTH_SECRET`
 - `REPORT_TIMEZONE` (e.g. `Asia/Dhaka`)
+- `SUPER_ADMIN_USER`
+- `ADMIN_USER`
+- `EMPLOYEE_USER`
 - `SUPER_ADMIN_PASSWORD`
 - `ADMIN_PASSWORD`
 - `EMPLOYEE_PASSWORD`
 
-## Default Login Emails
+## Default Login Usernames
 
-- `superadmin@fisher.local`
-- `admin@fisher.local`
-- `employee@fisher.local`
+- `superadmin`
+- `admin`
+- `employee`
 
 Passwords are taken from env variables above (hardcoded defaults are in `.env.example`).

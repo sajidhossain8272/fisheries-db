@@ -5,7 +5,7 @@
   "description": "Vercel-ready fish inventory and sales system with role-based authentication.",
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "next build --webpack",
     "start": "next start",
     "lint": "next lint"
   },

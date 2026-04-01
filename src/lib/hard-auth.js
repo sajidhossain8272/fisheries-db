@@ -6,7 +6,7 @@ const COOKIE_NAME = "fisher_session";
 const SESSION_MAX_AGE = 60 * 60 * 12;
 
 function getSecret() {
-  return process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET || "replace-with-strong-secret";
+  return process.env.AUTH_SECRET || "replace-with-strong-secret";
 }
 
 function base64Url(input) {
