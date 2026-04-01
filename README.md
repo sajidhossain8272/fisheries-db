@@ -54,3 +54,7 @@ Set these environment variables in Vercel Project Settings:
 - `employee`
 
 Passwords are taken from env variables above (hardcoded defaults are in `.env.example`).
+
+
+Admin can create users 
+filter by date 

@@ -36,17 +36,72 @@ async function createSaleAction(formData) {
   revalidatePath("/dashboard");
 }
 
-async function getSalesData() {
+async function getSalesData(searchParams) {
   const db = await getDb();
-  const [fishOptions, recentSales] = await Promise.all([
+  
+  // Parse filters
+  const page = Math.max(1, parseInt(searchParams?.page || "1"));
+  const pageSize = 15;
+  const skip = (page - 1) * pageSize;
+  
+  const filterType = searchParams?.filterType || "all"; // "all", "date", "month"
+  const startDate = searchParams?.startDate || "";
+  const endDate = searchParams?.endDate || "";
+  const filterMonth = searchParams?.month || "";
+  
+  let dateFilter = {};
+  
+  if (filterType === "date" && startDate && endDate) {
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    end.setHours(23, 59, 59, 999);
+    dateFilter = { saleDate: { $gte: start, $lte: end } };
+  } else if (filterType === "month" && filterMonth) {
+    const [year, month] = filterMonth.split("-");
+    const start = new Date(parseInt(year), parseInt(month) - 1, 1);
+    const end = new Date(parseInt(year), parseInt(month), 0, 23, 59, 59, 999);
+    dateFilter = { saleDate: { $gte: start, $lte: end } };
+  }
+  
+  const [fishOptions, recentSales, totalCount] = await Promise.all([
     db.collection("inventory_batches").distinct("fishName", { remainingKg: { $gt: 0 } }),
-    db.collection("sales").find({}).sort({ saleDate: -1 }).limit(30).toArray()
+    db.collection("sales")
+      .find(dateFilter)
+      .sort({ saleDate: -1 })
+      .skip(skip)
+      .limit(pageSize)
+      .toArray(),
+    db.collection("sales").countDocuments(dateFilter)
   ]);
-  return { fishOptions: fishOptions.sort(), recentSales };
+  
+  const totalPages = Math.ceil(totalCount / pageSize);
+  
+  return { 
+    fishOptions: fishOptions.sort(), 
+    recentSales,
+    currentPage: page,
+    totalPages,
+    totalCount,
+    pageSize,
+    filterType,
+    startDate,
+    endDate,
+    filterMonth
+  };
 }
 
-export default async function SalesPage() {
-  const { fishOptions, recentSales } = await getSalesData();
+export default async function SalesPage({ searchParams }) {
+  const { 
+    fishOptions, 
+    recentSales, 
+    currentPage, 
+    totalPages, 
+    totalCount,
+    filterType,
+    startDate,
+    endDate,
+    filterMonth
+  } = await getSalesData(searchParams);
 
   return (
     <div className="space-y-6">
@@ -84,7 +139,93 @@ export default async function SalesPage() {
       </section>
 
       <section className="card p-5">
-        <h2 className="text-lg font-semibold">Recent Sales Ledger</h2>
+        <h2 className="text-lg font-semibold">Sales Ledger</h2>
+        
+        {/* Filter Controls */}
+        <div className="mt-4 space-y-3">
+          <div className="flex flex-wrap gap-2 items-center text-sm">
+            <label className="font-medium">Filter by:</label>
+            <a
+              href="?page=1"
+              className={`px-3 py-1 rounded ${filterType === "all" ? "bg-black text-white" : "bg-zinc-200 text-black"}`}
+            >
+              All
+            </a>
+            <a
+              href="?filterType=date&page=1"
+              className={`px-3 py-1 rounded ${filterType === "date" ? "bg-black text-white" : "bg-zinc-200 text-black"}`}
+            >
+              By Date Range
+            </a>
+            <a
+              href="?filterType=month&page=1"
+              className={`px-3 py-1 rounded ${filterType === "month" ? "bg-black text-white" : "bg-zinc-200 text-black"}`}
+            >
+              By Month
+            </a>
+          </div>
+
+          {/* Date Range Filter */}
+          {filterType === "date" && (
+            <form className="flex gap-2 flex-wrap items-end">
+              <div>
+                <label className="block text-xs text-zinc-600 mb-1">Start Date</label>
+                <input
+                  type="date"
+                  name="startDate"
+                  defaultValue={startDate}
+                  className="input"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-zinc-600 mb-1">End Date</label>
+                <input
+                  type="date"
+                  name="endDate"
+                  defaultValue={endDate}
+                  className="input"
+                  required
+                />
+              </div>
+              <button type="submit" className="btn-black text-sm">
+                Filter
+              </button>
+              <a href="?page=1" className="px-3 py-2 bg-zinc-200 text-black rounded text-sm">
+                Clear
+              </a>
+            </form>
+          )}
+
+          {/* Month Filter */}
+          {filterType === "month" && (
+            <form className="flex gap-2 flex-wrap items-end">
+              <div>
+                <label className="block text-xs text-zinc-600 mb-1">Month</label>
+                <input
+                  type="month"
+                  name="month"
+                  defaultValue={filterMonth}
+                  className="input"
+                  required
+                />
+              </div>
+              <button type="submit" className="btn-black text-sm">
+                Filter
+              </button>
+              <a href="?page=1" className="px-3 py-2 bg-zinc-200 text-black rounded text-sm">
+                Clear
+              </a>
+            </form>
+          )}
+        </div>
+
+        {/* Results Info */}
+        <div className="mt-4 text-sm text-zinc-600">
+          Showing {recentSales.length > 0 ? (currentPage - 1) * 15 + 1 : 0} to {(currentPage - 1) * 15 + recentSales.length} of {totalCount} sales
+        </div>
+
+        {/* Table */}
         <div className="mt-4 overflow-x-auto">
           <table className="w-full min-w-[980px] border-collapse">
             <thead>
@@ -123,6 +264,49 @@ export default async function SalesPage() {
             </tbody>
           </table>
         </div>
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className="mt-4 flex justify-center items-center gap-2">
+            {currentPage > 1 && (
+              <>
+                <a
+                  href={`?filterType=${filterType}${startDate ? `&startDate=${startDate}` : ""}${endDate ? `&endDate=${endDate}` : ""}${filterMonth ? `&month=${filterMonth}` : ""}&page=1`}
+                  className="px-2 py-1 border border-zinc-300 rounded text-sm hover:bg-zinc-100"
+                >
+                  First
+                </a>
+                <a
+                  href={`?filterType=${filterType}${startDate ? `&startDate=${startDate}` : ""}${endDate ? `&endDate=${endDate}` : ""}${filterMonth ? `&month=${filterMonth}` : ""}&page=${currentPage - 1}`}
+                  className="px-2 py-1 border border-zinc-300 rounded text-sm hover:bg-zinc-100"
+                >
+                  Prev
+                </a>
+              </>
+            )}
+
+            <span className="px-3 py-1 text-sm text-zinc-600">
+              Page {currentPage} of {totalPages}
+            </span>
+
+            {currentPage < totalPages && (
+              <>
+                <a
+                  href={`?filterType=${filterType}${startDate ? `&startDate=${startDate}` : ""}${endDate ? `&endDate=${endDate}` : ""}${filterMonth ? `&month=${filterMonth}` : ""}&page=${currentPage + 1}`}
+                  className="px-2 py-1 border border-zinc-300 rounded text-sm hover:bg-zinc-100"
+                >
+                  Next
+                </a>
+                <a
+                  href={`?filterType=${filterType}${startDate ? `&startDate=${startDate}` : ""}${endDate ? `&endDate=${endDate}` : ""}${filterMonth ? `&month=${filterMonth}` : ""}&page=${totalPages}`}
+                  className="px-2 py-1 border border-zinc-300 rounded text-sm hover:bg-zinc-100"
+                >
+                  Last
+                </a>
+              </>
+            )}
+          </div>
+        )}
       </section>
     </div>
   );
