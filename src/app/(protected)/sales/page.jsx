@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { getDb } from "@/lib/mongodb";
 import { canManageSales } from "@/lib/roles";
 import { formatKg, formatMoney, toNumber } from "@/lib/number";
@@ -9,22 +10,22 @@ import { getSession } from "@/lib/hard-auth";
 async function createSaleAction(formData) {
   "use server";
 
+  const session = await getSession();
+  if (!session || !canManageSales(session.role)) {
+    throw new Error("Permission denied for sales.");
+  }
+
+  const fishName = String(formData.get("fishName") || "").trim();
+  const quantityKg = toNumber(formData.get("quantityKg"));
+  const salePricePerKg = toNumber(formData.get("salePricePerKg"));
+  const saleDateRaw = String(formData.get("saleDate") || "").trim();
+  const saleDate = saleDateRaw ? new Date(saleDateRaw) : new Date();
+
+  if (!fishName || quantityKg <= 0 || salePricePerKg <= 0 || Number.isNaN(saleDate.getTime())) {
+    throw new Error("Invalid sale input.");
+  }
+
   try {
-    const session = await getSession();
-    if (!session || !canManageSales(session.role)) {
-      throw new Error("Permission denied for sales.");
-    }
-
-    const fishName = String(formData.get("fishName") || "").trim();
-    const quantityKg = toNumber(formData.get("quantityKg"));
-    const salePricePerKg = toNumber(formData.get("salePricePerKg"));
-    const saleDateRaw = String(formData.get("saleDate") || "").trim();
-    const saleDate = saleDateRaw ? new Date(saleDateRaw) : new Date();
-
-    if (!fishName || quantityKg <= 0 || salePricePerKg <= 0 || Number.isNaN(saleDate.getTime())) {
-      throw new Error("Invalid sale input.");
-    }
-
     await recordSaleFIFO({
       fishName,
       quantityKg,
@@ -32,14 +33,20 @@ async function createSaleAction(formData) {
       saleDate,
       actorUsername: session.username
     });
+  } catch (error) {
+    console.error("Sales recording error:", error);
+    throw new Error(error?.message || "Failed to record sale. Please try again.");
+  }
 
+  try {
     revalidatePath("/sales");
     revalidatePath("/inventory");
     revalidatePath("/dashboard");
   } catch (error) {
-    console.error("Sales action error:", error);
-    throw error;
+    console.error("Revalidation error:", error);
   }
+
+  redirect("/sales");
 }
 
 function FilterDateForm({ startDate, endDate }) {

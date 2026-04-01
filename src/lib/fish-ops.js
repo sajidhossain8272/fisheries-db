@@ -127,6 +127,9 @@ export async function recordSaleFIFO({
       const result = await db.collection("sales").insertOne(sale, { session });
       createdSale = { ...sale, _id: result.insertedId };
     });
+  } catch (error) {
+    console.error("recordSaleFIFO error:", error);
+    throw error;
   } finally {
     await session.endSession();
   }
