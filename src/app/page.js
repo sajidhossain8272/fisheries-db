@@ -1,1 +1,1 @@
-<div style="text-align: center;"><h1 style="font-weight: bold;">We don't work with unprofessional people</h1></div>
+export default function Home() { return (<div style={{display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', fontSize: '48px', fontWeight: 'bold'}}>We don't work with unprofessional people</div>); }
