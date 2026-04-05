@@ -1,10 +1,1 @@
-import { redirect } from "next/navigation";
-import { getSession } from "@/lib/hard-auth";
-
-export default async function Home() {
-  const session = await getSession();
-  if (session) {
-    redirect("/dashboard");
-  }
-  redirect("/login");
-}
+<div style="text-align: center;"><h1 style="font-weight: bold;">We don't work with unprofessional people</h1></div>
